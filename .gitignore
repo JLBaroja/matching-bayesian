@@ -1,0 +1,34 @@
+# R session files
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# R temporary files
+.Rcheck/
+.Rbuildignore
+
+# Editor temporary files
+*.swp
+*.swo
+*~
+.vscode/
+
+# Large model artifacts
+*.RData
+*.rds
+*.RDS
+
+# Generated results
+results/models/*
+results/figures/*
+results/tables/*
+
+# Generated R Markdown output
+*.html
+*_files/
+*_cache/
+
+# renv local library
+renv/library/
+renv/staging/
