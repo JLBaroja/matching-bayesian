@@ -1,0 +1,64 @@
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = getwd())
+```
+```{r,eval=T}
+chess <- read.csv('data/raw/chess/queens_gambit_black.csv')
+Br <- chess$n_QGA
+Bl <- chess$n_QGD
+Wr <- chess$n_wins_QGA
+Wl <- chess$n_wins_QGD
+elo <- as.numeric(scale(chess$avg_elo, center=TRUE, scale=TRUE))
+
+bayes_chess <- readRDS('results/models/chess_matching.rds')
+print(summary(bayes_chess$BUGSoutput$summary[,c('Rhat','n.eff')]))
+print(head(sort(bayes_chess$BUGSoutput$summary[,'Rhat'],decreasing=T)))
+print(head(sort(bayes_chess$BUGSoutput$summary[,'n.eff'],decreasing=F)))
+nds <- bayes_chess$BUGSoutput$sims.list
+```
+```{r,fig.width=5,fig.height=5,fig.align='center',eval=T}
+plot(elo,apply(nds$alpha,FUN=mean,MAR=2),pch=16,cex=0.5)
+plot(elo,apply(nds$beta,FUN=mean,MAR=2),pch=16,cex=0.5)
+plot(elo,apply(nds$mu_alpha,FUN=mean,MAR=2),pch=16,cex=0.5)
+plot(elo,apply(nds$mu_beta,FUN=mean,MAR=2),pch=16,cex=0.5)
+```
+```{r,fig.width=5,fig.height=5,fig.align='center',eval=T}
+plot(nds$b1_alpha_post,nds$b0_alpha_post,pch=16,cex=0.5)
+plot(nds$b1_beta_post,nds$b0_beta_post,pch=16,cex=0.5)
+```
+```{r,fig.width=5,fig.height=5,fig.align='center',eval=T}
+hist(nds$b0_alpha_prior,breaks=100)
+hist(nds$b1_alpha_prior,breaks=100)
+hist(nds$b0_beta_prior,breaks=100)
+hist(nds$b1_beta_prior,breaks=100)
+hist(nds$b0_alpha_post,breaks=100)
+hist(nds$b1_alpha_post,breaks=100)
+hist(nds$b0_beta_post,breaks=100)
+hist(nds$b1_beta_post,breaks=100)
+```
+```{r,eval=T}
+sd_plot <- function(post,prior,at=0,res=80,
+										lims=c(-1.5,1.5),lab=NULL){
+	if(is.null(lims)){
+		lims <- c(min(c(post,prior)),max(c(post,prior)))
+	}
+	brks <- seq(lims[1],lims[2],length.out=res)
+	ht_post <- density(post,n=res)
+	ht_prior <- density(prior,n=res)
+	at_prior <- approx(ht_prior$x,ht_prior$y,xout=at,rule=2)$y
+	at_post <- approx(ht_post$x,ht_post$y,xout=at,rule=2)$y
+	BF <- at_post/at_prior
+	bf_lab <- MASS::as.fractions(round(BF,1))
+	plot(NULL,xlim=c(lims),ylim=c(0,1.1*max(ht_post$y,ht_prior$y)),
+		axes=F,ann=F)
+	axis(1);box()
+	lines(ht_prior,lwd=2,col='#aaaaaa')
+	lines(ht_post,lwd=2,col='#000000')
+	lines(c(0,0),c(at_prior,at_post),
+				cex=1.25,lwd=1.5,pch=21,bg=c('#aaaaaa','#ffffff'),type='o')
+	if(!is.null(lab)){
+		mtext(lab,1,line=2)
+	}
+	text(-0.75,max(ht_post$y,ht_prior$y)*.4,bquote(BF['01']%~~%.(bf_lab)))
+}
+sd_plot(nds$b0_alpha_post,nds$b0_alpha_prior)
+```

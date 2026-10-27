@@ -1,10 +1,10 @@
-source('plotting_functions.R')
-chess <- read.csv('queens_gambit_black.csv')
+source('R/plotting_functions.R')
+chess <- read.csv('data/raw/chess/queens_gambit_black.csv')
 Br <- chess$n_QGA
 Bl <- chess$n_QGD
 Wr <- chess$n_wins_QGA
 Wl <- chess$n_wins_QGD
-load('bayes_chess.RData')
+bayes_chess <- readRDS('results/models/chess_matching.rds')
 print(summary(bayes_chess$BUGSoutput$summary[,c('Rhat','n.eff')]))
 print(head(sort(bayes_chess$BUGSoutput$summary[,'Rhat'],decreasing=T)))
 print(head(sort(bayes_chess$BUGSoutput$summary[,'n.eff'],decreasing=F)))
@@ -36,7 +36,7 @@ sd_plot <- function(post,prior,at=0,res=80,lims=c(-1.5,1.5),lab=NULL){
 }
 #sd_plot(nds$b0_alpha_post,nds$b0_alpha_prior)
 
-pdf(file='chess_1.pdf',width=4,height=4)
+pdf(file='results/figures/chess_1.pdf',width=4,height=4)
 	par(mar=c(2.5,2.5,1,1),oma=c(0,0,0,0),
 		tck=-0.02,mgp=c(3,0.5,0),cex.axis=.9)
 	W_ratio_pred <- log(nds$Wl_pred/nds$Wr_pred)
@@ -76,7 +76,7 @@ pdf(file='chess_1.pdf',width=4,height=4)
 	mtext(expression(log(B[declined]/B[accepted])),2,line=1.25,outer=F,cex=0.8)
 dev.off()
 
-pdf(file='chess_2.pdf',width=5.5,height=4)
+pdf(file='results/figures/chess_2.pdf',width=5.5,height=4)
 layout(matrix(1:4,ncol=2,byrow=T))
 par(mar=c(3,0.5,1,1),oma=c(0,0,0,0),
 		tck=-0.03,mgp=c(3,0.5,0),cex.axis=.9)
