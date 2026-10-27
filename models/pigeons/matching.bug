@@ -1,0 +1,32 @@
+model{
+	for(b in 1:n_birds){
+  # Unobservable	
+		alpha[b] ~ dnorm(0,1/10)
+		beta[b] ~ dnorm(1,1/10)
+#		beta[b] ~ dunif(0,2)
+		lambda[b] ~ dexp(0.1)
+		kappa[b] ~ dexp(0.1)
+		mu_phi[b] ~ dbeta(1,1)
+		nu_phi[b] ~ dexp(0.1)
+	# Predictive
+		phi_pred[b] ~ dbeta(mu_phi[b]*nu_phi[b],(1-mu_phi[b])*nu_phi[b])
+		logit(theta_pred[b]) <- alpha[b]+beta[b]*log(phi_pred[b]/(1-phi_pred[b]))
+		Bl_pred[b] ~ dbin(theta_pred[b],Nresp_pred[b])
+		Br_pred[b] <- Nresp_pred[b] - Bl_pred[b]
+		Wl_pred[b] ~ dbin(phi_pred[b],Nreinf_pred[b])
+		Wr_pred[b] <- Nreinf_pred[b] - Wl_pred[b]
+		Nresp_pred[b] ~ dpois(lambda[b])
+		Nreinf_pred[b] ~ dpois(kappa[b])
+	}
+
+	for(i in 1:n_obs){
+		phi[bird[i],unit[i]] ~ dbeta(mu_phi[bird[i]]*nu_phi[bird[i]],(1-mu_phi[bird[i]])*nu_phi[bird[i]])
+		logit(theta[bird[i],unit[i]]) <- alpha[bird[i]]+beta[bird[i]]*log(phi[bird[i],unit[i]]/(1-phi[bird[i],unit[i]]))
+		Bl[i] ~ dbin(theta[bird[i],unit[i]],Nresp[i])
+	#	Br[i] ~ dbin(1-theta[bird[i],unit[i]],Nresp[i])
+		Wl[i] ~ dbin(phi[bird[i],unit[i]],Nreinf[i])
+	#	Wr[i] ~ dbin(gamma_r[bird[i],unit[i]],Br[i])
+		Nresp[i] ~ dpois(lambda[bird[i]])
+		Nreinf[i] ~ dpois(kappa[bird[i]])
+	}
+}

@@ -1,8 +1,8 @@
 ```{r}
 library('R2jags')
-source('plotting_functions.R')
-source('../../Advancement/color_palettes.R')
-birds <- read.csv('pigeons_by_session.csv')
+source('R/plotting_functions.R')
+source('R/color_palettes.R')
+birds <- read.csv('data/raw/pigeons/pigeons_by_session.csv')
 birds <- subset(birds,dynamic_session==F)
 Bl <- birds$resp_left
 Br <- birds$resp_right
@@ -71,47 +71,12 @@ for(tm in 1:length(unique(bird))){
 }
 ```
 ```{r,eval=T}
-write('
-model{
-	for(b in 1:n_birds){
-  # Unobservable	
-		alpha[b] ~ dnorm(0,1/10)
-		beta[b] ~ dnorm(1,1/10)
-#		beta[b] ~ dunif(0,2)
-		lambda[b] ~ dexp(0.1)
-		kappa[b] ~ dexp(0.1)
-		mu_phi[b] ~ dbeta(1,1)
-		nu_phi[b] ~ dexp(0.1)
-	# Predictive
-		phi_pred[b] ~ dbeta(mu_phi[b]*nu_phi[b],(1-mu_phi[b])*nu_phi[b])
-		logit(theta_pred[b]) <- alpha[b]+beta[b]*log(phi_pred[b]/(1-phi_pred[b]))
-		Bl_pred[b] ~ dbin(theta_pred[b],Nresp_pred[b])
-		Br_pred[b] <- Nresp_pred[b] - Bl_pred[b]
-		Wl_pred[b] ~ dbin(phi_pred[b],Nreinf_pred[b])
-		Wr_pred[b] <- Nreinf_pred[b] - Wl_pred[b]
-		Nresp_pred[b] ~ dpois(lambda[b])
-		Nreinf_pred[b] ~ dpois(kappa[b])
-	}
-
-	for(i in 1:n_obs){
-		phi[bird[i],unit[i]] ~ dbeta(mu_phi[bird[i]]*nu_phi[bird[i]],(1-mu_phi[bird[i]])*nu_phi[bird[i]])
-		logit(theta[bird[i],unit[i]]) <- alpha[bird[i]]+beta[bird[i]]*log(phi[bird[i],unit[i]]/(1-phi[bird[i],unit[i]]))
-		Bl[i] ~ dbin(theta[bird[i],unit[i]],Nresp[i])
-	#	Br[i] ~ dbin(1-theta[bird[i],unit[i]],Nresp[i])
-		Wl[i] ~ dbin(phi[bird[i],unit[i]],Nreinf[i])
-	#	Wr[i] ~ dbin(gamma_r[bird[i],unit[i]],Br[i])
-		Nresp[i] ~ dpois(lambda[bird[i]])
-		Nreinf[i] ~ dpois(kappa[bird[i]])
-	}
-}
-','new_matching.bug')
 set.seed(123)
 bayes_bird <- jags(
 	data=observed,
 	parameters.to.save=unobserved,
 	n.iter=25000,n.burnin=10000,n.thin=15,
-	model.file='new_matching.bug')
-unlink('new_matching.bug')
+	model.file='models/pigeons/matching.bug')
 save(bayes_bird,file='bayes_birds.RData')
 print(n_obs)
 ```
