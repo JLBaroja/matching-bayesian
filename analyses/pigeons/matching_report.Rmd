@@ -1,0 +1,216 @@
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = getwd())
+```
+```{r}
+library('R2jags')
+source('R/plotting_functions.R')
+source('R/color_palettes.R')
+birds <- read.csv('data/raw/pigeons/pigeons_by_session.csv')
+birds <- subset(birds,dynamic_session==F)
+Bl <- birds$resp_left
+Br <- birds$resp_right
+Wl <- birds$reinf_left
+Wr <- birds$reinf_right
+Nresp <- Br+Bl
+Nreinf <- Wr+Wl
+bird = birds$bird_num
+#unit = birds$unit
+unit = NA
+for(b in 1:length(unique(bird))){
+	unit[bird==b] <- 1:sum(bird==b)
+}
+n_birds = length(unique(birds$bird))
+n_obs = nrow(birds)
+observed <- list(
+	Br=Br,Bl=Bl,Wr=Wr,Wl=Wl,
+	Nresp=Nresp,Nreinf=Nreinf,
+	bird=bird,
+	unit=unit,
+	n_birds=n_birds,n_obs=n_obs)
+unobserved <- c(
+	'alpha','beta','lambda','kappa',
+	'theta','phi',
+	'mu_alpha','sd_alpha','mu_beta','sd_beta',
+	'mu_phi','nu_phi',
+	'theta_pred','phi_pred',
+	'Bl_pred','Br_pred',
+	'Wl_pred','Wr_pred',
+	'Nresp_pred','Nreinf_pred'
+)	
+```
+```{r}
+plot_n_mle <- function(Wl,Wr,Bl,Br,xlimz=NULL,ylimz=NULL){
+	if(is.null(xlimz)){xlimz=c(-3,3)}
+	if(is.null(ylimz)){ylimz=c(-3,3)}
+	ratio_rewards <- log(Wl/Wr)
+	ratio_choices <- log(Bl/Br)
+	distance <- abs(ratio_choices-ratio_rewards)
+	plot(log(Wl/Wr),log(Bl/Br),
+		xlim=xlimz,ylim=ylimz,
+		pch=16,
+		#col=color_ch('F000000',alph=0.5*log(Nresp)/max(log(Nresp))),
+		col='#000000',
+		cex=0.0005*(Br+Bl))
+		#cex=.75)
+		#cex=distance*5/8+.35)
+	abline(h=0,lty='33',col='blue')
+	abline(v=0,lty='33',col='blue')
+	abline(0,1,col='orange',lwd=2,lty='22')
+	res <- lm(ratio_choices~ratio_rewards)
+	abline(res$coefficients,col='red',lwd=3)
+	return(res$coefficients)
+}
+```
+```{r,fig.width=9,fig.height=6,fig.align='center'}
+par(mar=rep(1,4))
+layout(matrix(1:length(unique(bird)),ncol=3,byrow=T))
+mle_birds <- vector(mode='list',length=length(unique(bird)))
+for(tm in 1:length(unique(bird))){
+	wl <- Wl[bird==tm]
+	wr <- Wr[bird==tm]
+	bl <- Bl[bird==tm]
+	br <- Br[bird==tm]
+	plot_n_mle(wl,wr,bl,br) -> mle_birds[[tm]]
+}
+```
+```{r,eval=T}
+bayes_bird <- readRDS('results/models/pigeons_matching.rds')
+```
+```{r,eval=T}
+print(summary(bayes_bird$BUGSoutput$summary[,c('Rhat','n.eff')]))
+print(head(sort(bayes_bird$BUGSoutput$summary[,'Rhat'],decreasing=T)))
+print(head(sort(bayes_bird$BUGSoutput$summary[,'n.eff'],decreasing=F)))
+nds <- bayes_bird$BUGSoutput$sims.list
+```
+```{r}
+plot_pred <- function(
+  W_ratio_pred,
+	B_ratio_pred,alpha,beta,
+	Wl,Wr,Bl,Br,...){
+	plot(W_ratio_pred,B_ratio_pred,
+		xlim=c(-3,3),ylim=c(-3,3),
+		pch=16,col='#aaaaaa')
+	points(log(Wl/Wr),log(Bl/Br),pch=21,bg='#dddddd',cex=(Bl+Br+Wr+Wl)*0.0005,...)
+	abline(h=0,lty='33',col='blue')
+	abline(v=0,lty='33',col='blue')
+	abline(0,1,col='orange',lwd=2,lty='22')
+	indx <- sample(length(alpha),size=100)
+	for(i in indx){abline(alpha[i],beta[i],col='#ee000020')}
+}
+```
+```{r,fig.width=9,fig.height=6,fig.align='center'}
+par(mar=rep(1,4))
+layout(matrix(1:length(unique(bird)),ncol=3,byrow=T))
+for(tm in 1:length(unique(bird))){
+	W_ratio_pred <- log(nds$Wl_pred[,tm]/nds$Wr_pred[,tm])
+	B_ratio_pred <- log(nds$Bl_pred[,tm]/nds$Br_pred[,tm])
+	alpha <- nds$alpha[,tm]
+	beta <- nds$beta[,tm]
+	plot_pred(W_ratio_pred,B_ratio_pred,alpha,beta,
+		Wl[bird==tm],Wr[bird==tm],Bl[bird==tm],Br[bird==tm],col=bird_colors[tm])
+}
+```
+```{r,fig.width=5,fig.height=5}
+plot(NULL,xlim=c(-.1,.2),ylim=c(0.5,1.5),ann=F)
+mtext('Intercept',1,line=2)
+mtext('Slope',2,line=2)
+for(b in 1:length(unique(bird))){
+	points(nds$alpha[,b],nds$beta[,b],col=bird_colors[b])
+}
+abline(v=0,lty='33')
+abline(h=1,lty='33')
+```
+```{r,eval=T}
+pdf(file='results/figures/pigeons_1.pdf',width=6,height=4)
+	layout(matrix(1:6,ncol=3,byrow=T))
+	par(mar=c(2,2,1,1),oma=c(2,2,0,0),
+		tck=-0.03,mgp=c(3,0.5,0),cex.axis=.9)
+for(tm in 1:length(unique(bird))){
+	W_ratio_pred <- log(nds$Wl_pred[,tm]/nds$Wr_pred[,tm])
+	B_ratio_pred <- log(nds$Bl_pred[,tm]/nds$Br_pred[,tm])
+	alpha <- nds$alpha[,tm]
+	beta <- nds$beta[,tm]
+	plot(NULL,xlim=c(-3,3),ylim=c(-3,3))
+	points(W_ratio_pred,B_ratio_pred,col='#99999905',pch=16,cex=1)
+	x <- W_ratio_pred
+	y <- B_ratio_pred
+	x_brks <- seq(-3,3,length.out=20)
+	y_low <- y_high <- x_mids <- NA
+	for(xb in 1:(length(x_brks)-1)){
+		qntl <- quantile(y[x>=x_brks[xb]&x<x_brks[xb+1]],probs=c(0.025,0.975))
+		y_low[xb] <- qntl[1]; y_high[xb] <- qntl[2]
+		x_mids[xb] <-x_brks[xb]+(x_brks[xb+1]-x_brks[xb])/2
+	}
+	lines(x_mids,y_high,lwd=1.5,col='#888888')
+	lines(x_mids,y_low,lwd=1.5,col='#888888')
+	#scatter_quantile(W_ratio_pred,B_ratio_pred)
+	points(log(Wl[bird==tm]/Wr[bird==tm]),
+				 log(Bl[bird==tm]/Br[bird==tm]),pch=16,cex=0.6)
+	abline(0,1,lty='42',col='#dd0000',lwd=1.25)
+	text(-3,3,paste('Bird',tm),font=2,adj=c(0,1))
+	if(tm==1){
+		legend('bottomright',legend=c('Data','Posterior Prediction'),pch=c(16,22),
+			pt.cex=.8,pt.bg=c(NA,'#cccccc'),col=c('black','#888888'),
+			x.intersp=.7,cex=.7,box.lty='blank')
+	}
+}
+	mtext(expression(log(W[left]/W[right])),1,line=0.5,outer=T,cex=0.8)
+	mtext(expression(log(B[left]/B[right])),2,line=-0.25,outer=T,cex=0.8)
+dev.off()
+```
+```{r}
+pdf(file='results/figures/pigeons_2.pdf',width=4,height=4)
+layout(matrix(c(2,0,1,3),byrow=T,ncol=2),widths=c(3,1),heights=c(1,3))
+par(mar=rep(0.25,4),oma=c(3,3,1,1),mgp=c(3,.5,0),tck=-.02)
+lims_bias <- c(-.1,.3)
+lims_sensi <- c(0.4,1.6)
+# Joint
+plot(NULL,xlim=lims_bias,ylim=lims_sensi)
+mtext('Bias',1,line=1.75)
+mtext('Sensitivity',2,line=1.75)
+for(br in 1:length(unique(bird))){
+	points(nds$alpha[,br],nds$beta[,br],pch=16,cex=.5,col='#aaaaaa05')
+	try(single_contour(nds$alpha[,br],nds$beta[,br],col='#555555',lwd=1.5))
+	text(mean(nds$alpha[,br]),mean(nds$beta[,br]),paste('Bird',br),font=2,adj=c(0.5,-1.35),cex=0.75)
+}
+abline(v=0,lty='33',col='#dd0000')
+abline(h=1,lty='33',col='#dd0000')
+# Marginal BIAS
+par(tck=-0.05)
+plot(NULL,xlim=lims_bias,ylim=c(0,60),ann=F,axes=F)
+axis(1,labels=NA);box()
+for(br in 1:length(unique(bird))){
+	brks <- seq(-0.05,.25,length.out=80)
+	ht <- hist(nds$alpha[,br],breaks=brks,plot=F)
+	val <- which(ht$dens>0.01)
+	lines(ht$mids[val],ht$dens[val],lwd=1.5,col='#999999')
+}
+abline(v=0,lty='33',col='#dd0000')
+# Marginal SENSITIVITY
+plot(NULL,xlim=c(0,60),ylim=lims_sensi,ann=F,axes=F)
+axis(2,labels=F);box()
+for(br in 1:length(unique(bird))){
+	#brks <- seq(0.45,1.4,length.out=80)
+	brks <- seq(0,2,length.out=160)
+	ht <- hist(nds$beta[,br],breaks=brks,plot=F)
+	val <- which(ht$dens>0.01)
+	lines(ht$dens[val],
+				ht$mids[val],
+				lwd=1.5,col='#999999')
+}
+abline(h=1,lty='33',col='#dd0000')
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
