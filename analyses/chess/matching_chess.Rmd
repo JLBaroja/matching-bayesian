@@ -1,0 +1,195 @@
+```{r,eval=T}
+library('R2jags')
+chess <- read.csv('queens_gambit_black.csv')
+Br <- chess$n_QGA
+Bl <- chess$n_QGD
+Wr <- chess$n_wins_QGA
+Wl <- chess$n_wins_QGD
+Nresp <- chess$total_QG
+Nreinf <- Wr+Wl
+elo <- chess$avg_elo
+elo <- as.numeric(scale(elo,center=T,scale=T))
+n_obs <- nrow(chess)
+observed <- list(
+	Br=Br,Bl=Bl,Wr=Wr,Wl=Wl,
+	Nresp=Nresp,Nreinf=Nreinf,
+	#elo=chess$avg_elo,
+	elo=elo,
+	n_obs=n_obs)
+unobserved <- c(
+	'alpha','beta','lambda','kappa',
+	'phi','theta',
+	'mu_phi','nu_phi',
+	'Bl_pred','Br_pred',
+	'Wl_pred','Wr_pred',
+	'b0_alpha_post','b1_alpha_post',
+	'b0_beta_post','b1_beta_post',
+	'b0_alpha_prior','b1_alpha_prior',
+	'b0_beta_prior','b1_beta_prior',
+	'mu_alpha','sd_alpha',
+	'mu_beta','sd_beta'
+)
+```
+```{r,eval=T}
+write('
+model{
+	#alpha ~ dnorm(0,1)
+	#sd_alpha ~ dunif(0,.1)
+	sd_alpha ~ dexp(1)
+	sd_beta ~ dexp(1)
+	#beta ~ dnorm(1,1)
+	lambda ~ dexp(1)
+	kappa ~ dexp(1)
+	mu_phi ~ dbeta(1,1)
+	nu_phi ~ dexp(1)
+	b0_alpha_post ~ dnorm(0,10)
+	b1_alpha_post ~ dnorm(0,10)
+	b0_beta_post ~ dnorm(1,10)
+	b1_beta_post ~ dnorm(0,10)
+	b0_alpha_prior ~ dnorm(0,10)
+	b1_alpha_prior ~ dnorm(0,10)
+	b0_beta_prior ~ dnorm(1,10)
+	b1_beta_prior ~ dnorm(0,10)
+	for(i in 1:n_obs){
+
+		mu_alpha[i] <- b0_alpha_post + b1_alpha_post*elo[i]
+		z_alpha[i] ~ dnorm(0,1)
+		alpha[i] <- mu_alpha[i] + sd_alpha*z_alpha[i]
+		mu_beta[i] <- b0_beta_post + b1_beta_post*elo[i]
+		z_beta[i] ~ dnorm(0,1)
+		beta[i] <- mu_beta[i] + sd_beta*z_beta[i]
+		#beta[i] ~ dnorm(mu_beta[i],pow(sd_beta,-2))
+
+		phi[i] ~ dbeta(mu_phi*nu_phi,(1-mu_phi)*nu_phi)
+		logit(theta[i]) <- alpha[i]+beta[i]*log(phi[i]/(1-phi[i]))
+		Bl[i] ~ dbin(theta[i],Nresp[i])
+	#	Br[i] ~ dbin(1-theta[i],Nresp[i])
+		Wl[i] ~ dbin(phi[i],Nreinf[i])
+	#	Wr[i] ~ dbin(gamma_r[i],Br[i])
+		Nresp[i] ~ dpois(lambda)
+		Nreinf[i] ~ dpois(kappa)
+	}
+# Predictive
+		elo_pred ~ dnorm(0,1) 
+		mu_alpha_pred <- b0_alpha_post + b1_alpha_post*elo_pred
+		z_alpha_pred ~ dnorm(0,1)
+		alpha_pred <- mu_alpha_pred + sd_alpha*z_alpha_pred
+		mu_beta_pred <- b0_beta_post + b1_beta_post*elo_pred
+		z_beta_pred ~ dnorm(0,1)
+		beta_pred <- mu_beta_pred + sd_beta*z_beta_pred
+		phi_pred ~ dbeta(mu_phi*nu_phi,(1-mu_phi)*nu_phi)
+		logit(theta_pred) <- alpha_pred+beta_pred*log(phi_pred/(1-phi_pred))
+		Bl_pred ~ dbin(theta_pred,Nresp_pred)
+		Br_pred <- Nresp_pred - Bl_pred
+		Wl_pred ~ dbin(phi_pred,Nreinf_pred)
+		Wr_pred <- Nreinf_pred - Wl_pred
+		Nresp_pred ~ dpois(lambda)
+		Nreinf_pred ~ dpois(kappa)
+}
+','new_matching.bug')
+set.seed(123)
+bayes_chess <- jags(
+	data=observed,
+	parameters.to.save=unobserved,
+	n.iter=10000,n.burnin=4000,n.thin=6,
+	#n.iter=1000,n.burnin=0,n.thin=1,
+	model.file='new_matching.bug')
+unlink('new_matching.bug')
+save(bayes_chess,file='bayes_chess.RData')
+print(n_obs)
+```
+```{r,eval=T}
+load('bayes_chess.RData')
+print(summary(bayes_chess$BUGSoutput$summary[,c('Rhat','n.eff')]))
+print(head(sort(bayes_chess$BUGSoutput$summary[,'Rhat'],decreasing=T)))
+print(head(sort(bayes_chess$BUGSoutput$summary[,'n.eff'],decreasing=F)))
+nds <- bayes_chess$BUGSoutput$sims.list
+```
+```{r,fig.width=5,fig.height=5,fig.align='center',eval=T}
+plot(elo,apply(nds$alpha,FUN=mean,MAR=2),pch=16,cex=0.5)
+plot(elo,apply(nds$beta,FUN=mean,MAR=2),pch=16,cex=0.5)
+plot(elo,apply(nds$mu_alpha,FUN=mean,MAR=2),pch=16,cex=0.5)
+plot(elo,apply(nds$mu_beta,FUN=mean,MAR=2),pch=16,cex=0.5)
+```
+```{r,fig.width=5,fig.height=5,fig.align='center',eval=T}
+plot(nds$b1_alpha_post,nds$b0_alpha_post,pch=16,cex=0.5)
+plot(nds$b1_beta_post,nds$b0_beta_post,pch=16,cex=0.5)
+```
+```{r,fig.width=5,fig.height=5,fig.align='center',eval=T}
+hist(nds$b0_alpha_prior,breaks=100)
+hist(nds$b1_alpha_prior,breaks=100)
+hist(nds$b0_beta_prior,breaks=100)
+hist(nds$b1_beta_prior,breaks=100)
+hist(nds$b0_alpha_post,breaks=100)
+hist(nds$b1_alpha_post,breaks=100)
+hist(nds$b0_beta_post,breaks=100)
+hist(nds$b1_beta_post,breaks=100)
+```
+```{r,eval=T}
+sd_plot <- function(post,prior,at=0,res=80,
+										lims=c(-1.5,1.5),lab=NULL){
+	if(is.null(lims)){
+		lims <- c(min(c(post,prior)),max(c(post,prior)))
+	}
+	brks <- seq(lims[1],lims[2],length.out=res)
+	ht_post <- density(post,n=res)
+	ht_prior <- density(prior,n=res)
+	at_prior <- approx(ht_prior$x,ht_prior$y,xout=at,rule=2)$y
+	at_post <- approx(ht_post$x,ht_post$y,xout=at,rule=2)$y
+	BF <- at_post/at_prior
+	bf_lab <- MASS::as.fractions(round(BF,1))
+	plot(NULL,xlim=c(lims),ylim=c(0,1.1*max(ht_post$y,ht_prior$y)),
+		axes=F,ann=F)
+	axis(1);box()
+	lines(ht_prior,lwd=2,col='#aaaaaa')
+	lines(ht_post,lwd=2,col='#000000')
+	lines(c(0,0),c(at_prior,at_post),
+				cex=1.25,lwd=1.5,pch=21,bg=c('#aaaaaa','#ffffff'),type='o')
+	if(!is.null(lab)){
+		mtext(lab,1,line=2)
+	}
+	text(-0.75,max(ht_post$y,ht_prior$y)*.4,bquote(BF['01']%~~%.(bf_lab)))
+}
+sd_plot(nds$b0_alpha_post,nds$b0_alpha_prior)
+```
+```{r,eval=T}
+pdf(file='chess_1.pdf',width=4,height=4)
+	par(mar=c(2.5,2.5,1,1),oma=c(0,0,0,0),
+		tck=-0.02,mgp=c(3,0.5,0),cex.axis=.9)
+W_ratio_pred <- log(nds$Wl_pred/nds$Wr_pred)
+B_ratio_pred <- log(nds$Bl_pred/nds$Br_pred)
+	plot(NULL,xlim=c(-4,4),ylim=c(-4,4))
+	points(W_ratio_pred,B_ratio_pred,col='#99999905',pch=16,cex=1)
+	x <- W_ratio_pred
+	y <- B_ratio_pred
+	x_brks <- seq(-4,4,length.out=32)
+	y_low <- y_high <- x_mids <- NA
+	for(xb in 1:(length(x_brks)-1)){
+		qntl <- quantile(y[x>=x_brks[xb]&x<x_brks[xb+1]&is.finite(y)],probs=c(0.025,0.975),
+			na.rm=T)
+		y_low[xb] <- qntl[1]; y_high[xb] <- qntl[2]
+		x_mids[xb] <-x_brks[xb]+(x_brks[xb+1]-x_brks[xb])/2
+	}
+	lines(x_mids,y_high,lwd=2,col='#888888')
+	lines(x_mids,y_low,lwd=2,col='#888888')
+	points(log(Wl/Wr),
+				 log(Bl/Br),pch=16,cex=0.4)
+	abline(0,1,lty='42',col='#dd0000',lwd=1.25)
+	#text(-3,3,paste('Bird',tm),font=2,adj=c(0,1))
+		legend('bottomright',legend=c('Data','Posterior Prediction'),pch=c(16,22),
+			pt.cex=.8,pt.bg=c(NA,'#cccccc'),col=c('black','#888888'),
+			x.intersp=.7,cex=.7,box.lty='blank')
+	mtext(expression(log(W[declined]/W[accepted])),1,line=1.5,outer=F,cex=0.8)
+	mtext(expression(log(B[declined]/B[accepted])),2,line=1.25,outer=F,cex=0.8)
+dev.off()
+```
+```{r,eval=F}
+pdf(file='pigeons_2.pdf',width=4,height=4)
+layou(matrix(c(2,0,1,3),byrow=T,ncol=2),widths=c(3,1),heights=c(1,3))
+par(mar=rep(0.25,4),oma=c(4,4,1,1),mgp=c(3,.5,0),tck=-.02)
+lims_bias <- c(-.1,.3)
+lims_sensi <- c(0.45,1.55)
+# Joint
+plot(NULL,xlim=lims_bias,ylim=lims_sensi)
+dev.off()
+```

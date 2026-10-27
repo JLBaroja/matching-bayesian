@@ -1,0 +1,54 @@
+model{
+	#alpha ~ dnorm(0,1)
+	#sd_alpha ~ dunif(0,.1)
+	sd_alpha ~ dexp(1)
+	sd_beta ~ dexp(1)
+	#beta ~ dnorm(1,1)
+	lambda ~ dexp(1)
+	kappa ~ dexp(1)
+	mu_phi ~ dbeta(1,1)
+	nu_phi ~ dexp(1)
+	b0_alpha_post ~ dnorm(0,10)
+	b1_alpha_post ~ dnorm(0,10)
+	b0_beta_post ~ dnorm(1,10)
+	b1_beta_post ~ dnorm(0,10)
+	b0_alpha_prior ~ dnorm(0,10)
+	b1_alpha_prior ~ dnorm(0,10)
+	b0_beta_prior ~ dnorm(1,10)
+	b1_beta_prior ~ dnorm(0,10)
+	for(i in 1:n_obs){
+
+		mu_alpha[i] <- b0_alpha_post + b1_alpha_post*elo[i]
+		z_alpha[i] ~ dnorm(0,1)
+		alpha[i] <- mu_alpha[i] + sd_alpha*z_alpha[i]
+		mu_beta[i] <- b0_beta_post + b1_beta_post*elo[i]
+		z_beta[i] ~ dnorm(0,1)
+		beta[i] <- mu_beta[i] + sd_beta*z_beta[i]
+		#beta[i] ~ dnorm(mu_beta[i],pow(sd_beta,-2))
+
+		phi[i] ~ dbeta(mu_phi*nu_phi,(1-mu_phi)*nu_phi)
+		logit(theta[i]) <- alpha[i]+beta[i]*log(phi[i]/(1-phi[i]))
+		Bl[i] ~ dbin(theta[i],Nresp[i])
+	#	Br[i] ~ dbin(1-theta[i],Nresp[i])
+		Wl[i] ~ dbin(phi[i],Nreinf[i])
+	#	Wr[i] ~ dbin(gamma_r[i],Br[i])
+		Nresp[i] ~ dpois(lambda)
+		Nreinf[i] ~ dpois(kappa)
+	}
+# Predictive
+		elo_pred ~ dnorm(0,1) 
+		mu_alpha_pred <- b0_alpha_post + b1_alpha_post*elo_pred
+		z_alpha_pred ~ dnorm(0,1)
+		alpha_pred <- mu_alpha_pred + sd_alpha*z_alpha_pred
+		mu_beta_pred <- b0_beta_post + b1_beta_post*elo_pred
+		z_beta_pred ~ dnorm(0,1)
+		beta_pred <- mu_beta_pred + sd_beta*z_beta_pred
+		phi_pred ~ dbeta(mu_phi*nu_phi,(1-mu_phi)*nu_phi)
+		logit(theta_pred) <- alpha_pred+beta_pred*log(phi_pred/(1-phi_pred))
+		Bl_pred ~ dbin(theta_pred,Nresp_pred)
+		Br_pred <- Nresp_pred - Bl_pred
+		Wl_pred ~ dbin(phi_pred,Nreinf_pred)
+		Wr_pred <- Nreinf_pred - Wl_pred
+		Nresp_pred ~ dpois(lambda)
+		Nreinf_pred ~ dpois(kappa)
+}
