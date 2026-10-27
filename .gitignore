@@ -19,10 +19,8 @@
 *.rds
 *.RDS
 
-# Generated results
+# Large JAGS models outputs
 results/models/*
-results/figures/*
-results/tables/*
 
 # Generated R Markdown output
 *.html
